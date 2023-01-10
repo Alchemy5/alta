@@ -10,6 +10,12 @@ from pydub import AudioSegment
 from east_detector import EASTDetector
 from proc_utils import *
 from moviepy.editor import *
+from denoiser import pretrained
+from denoiser.dsp import convert_audio
+import torchaudio
+import torch
+
+from scipy.io import wavfile
 
 class Parser:
     def __init__(self, input_path : str):
@@ -22,18 +28,21 @@ class Parser:
             command = f"ffmpeg -i {self.video_path} -ab 160k -ac 2 -ar 44100 -vn {self.audio_path}"
             subprocess.call(command, shell=True)
             print("Audio file created.")
-        print("Constructing video object...")
-        self.clip = VideoFileClip(self.video_path)
-        print("Video object constructed")
         print("Creating Whisper Model...")
         self.whisper = whisper.load_model("small")
         print("Whisper created.")
         self.img_proc_detector = EASTDetector()
 
-    def preprocess(self):
+    def preprocess(self, path : str):
         """
-        Preprocesses audio file.
+        Filters and preprocesses audio sample.
         """
+        denoising_model = pretrained.dns64().cuda()
+        wav, sr = torchaudio.load(path)
+        wav = convert_audio(wav.cuda(), sr, denoising_model.sample_rate, denoising_model.chin).cuda()
+        wav = wav.cpu()
+        torchaudio.save(path, wav, sr)
+        # Note: denoising decreases performance significantly as of now
 
     def parse(self, start_time : int, end_time : int):
         """
@@ -113,15 +122,23 @@ class Parser:
         285: "so yeah let's just say it use 12 as an example it would be four so so if so if",
         299: "we're using 12 and we're going down the tree it has to be on the right side okay"
         }
-        times = list(transcript.keys())
+        all_transcript_text = ""
+        all_model_text = ""
         edit_distances = []
+        times = list(transcript.keys())
         for ind in range(len(times)-1):
             start_time = times[ind]
-            end_time = times[ind+1] + 1
+            end_time = times[ind+1]
             transcript_text = transcript[start_time]
+            all_transcript_text += (transcript_text + " ")
             model_output = self.parse(start_time, end_time)
+            all_model_text += (model_output + " ")
             print(f"Model: {model_output} vs Actual: {transcript_text}\n")
             edit_distance = editdistance.eval(model_output, transcript_text)
             edit_distances.append(edit_distance)
         print(edit_distances)
-        return statistics.mean(edit_distances) # score
+        print(f"Average edit distance: {statistics.mean(edit_distances)}") # score
+        print(f"All transcript text:\n{all_transcript_text}")
+        print(f"All model text:\n{all_model_text}")
+        print(f"Total edit distance: {editdistance.eval(all_transcript_text, all_model_text)}")
+        

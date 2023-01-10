@@ -3,7 +3,9 @@ import os
 import whisper
 import pytesseract
 import numpy as np
+import statistics
 import cv2
+import editdistance
 from pydub import AudioSegment
 from east_detector import EASTDetector
 from proc_utils import *
@@ -24,9 +26,14 @@ class Parser:
         self.clip = VideoFileClip(self.video_path)
         print("Video object constructed")
         print("Creating Whisper Model...")
-        self.whisper = whisper.load_model("base")
+        self.whisper = whisper.load_model("small")
         print("Whisper created.")
         self.img_proc_detector = EASTDetector()
+
+    def preprocess(self):
+        """
+        Preprocesses audio file.
+        """
 
     def parse(self, start_time : int, end_time : int):
         """
@@ -43,19 +50,7 @@ class Parser:
         mel = whisper.log_mel_spectrogram(audio).to(self.whisper.device)
         options = whisper.DecodingOptions()
         audio_str = (whisper.decode(self.whisper, mel, options)).text
-
-        bit = self.clip.subclip(start_time, start_time+1)
-        bit.write_videofile("bit.mp4")
-        cam = cv2.VideoCapture("bit.mp4")
-        _, frame = cam.read()
-        cam.release()
-        blank = np.zeros((frame.shape[0], frame.shape[1]))
-        norm_img = cv2.normalize(frame, blank, 0, 255, cv2.NORM_MINMAX)
-        slices = self.img_proc_detector.get_slices(norm_img)
-        binarized = binarize_images(slices, black_on_white=True)
-        screen_text_list = [pytesseract.image_to_string(img) for img in binarized]
-        screen_text = "\n".join(screen_text_list)
-        return (audio_str, screen_text)
+        return audio_str
         
     def parse_all(self, output_dir : str):
         """
@@ -64,14 +59,69 @@ class Parser:
         """
         counter = 0
         for start_time in range(0, 291, 10):
-            audio_str, screen_text = self.parse(start_time, start_time + 10)
+            audio_str = self.parse(start_time, start_time + 10)
             with open(f"{output_dir}/{start_time}.txt", "w") as f:
                 f.write("EXTRACTED AUDIO TRANSCRIPT:\n")
-                f.write(audio_str + "\n")
-                f.write("EXTRACTED SCREEN TEXT:\n")
-                f.write(screen_text)
+                f.write(audio_str)
             print(f"Parsed {counter}'th object\n")
-            counter = counter + 1
+            counter += 1
         
-
-
+    def evaluate(self):
+        """
+        Compares model audio output to transcript for evaluation purposes.
+        """
+        transcript = {
+        0: "oh hello oh you're hearing me yeah I can hear you carry me yeah I'm doing all",
+        5: "right wait how are you pretty good I'm pretty good I actually just found out that as a",
+        10: "video interview so yeah okay it's okay is this your first time using this",
+        17: "platform no I'm just before but from - three months ago so recent here okay",
+        22: "I've used I've used other ones but this is my first time using this particular okay yeah okay are you ready software",
+        30: "engineer over is looking for a new opportunity I'm looking for a new opportunity yeah yeah",
+        37: "what about you I'm working recently in in Bloomberg London office okay yeah",
+        43: "well okay yeah I'm in Bay Area California okay yeah okay cool thank you",
+        50: "so it's about that I will start asking you first okay so as you see you want some time to",
+        58: "read the question first yeah so it's a BST successor search yeah okay",
+        74: "okay so in a binary search tree and inorder successor of the node is defined",
+        81: "as the node with the smallest key greater than the key of the input node",
+        88: "given a node yeah binary search tree you're asked to write a function find",
+        94: "inorder successor that returns the inorder successor of input node if it",
+        100: "but that has no inorder successor return nor yes so what what you need to make",
+        107: "given I know you have to get the smallest node which have a smallest body withers and the given one it exists if",
+        113: "it doesn't agree it just return on okay and in the existing code you have the",
+        119: "struct for the node which you would code in Java yeah I'm gonna code in Java okay",
+        126: "so in you have a class for node that contains the key and lift Android and you have access to the parent itself and",
+        133: "the constructor takes a value for the key and for the MS which you need to",
+        139: "file which is fine in order successors take same but node and return your node which is a target one and knowledge if",
+        145: "it doesn't exist and you have to you have some logic for to insert but you",
+        150: "don't need to take care about that okay I'm sorry can you say that last part again you don't need to care about the",
+        156: "logic for the insert method okay the insert method yeah it doesn't matter for",
+        163: "you okay even not you will not need something like that so all you need just",
+        168: "editing right you could here in this part or problem okay",
+        182: "and then so the input isn't the necessary of the route it could be any",
+        187: "yeah it could be and you know something like the three example on the list okay yeah if I give a new something like",
+        193: "knowing okay so I'm searching for the node which contains the element greater",
+        199: "than nine and the same time is the smallest one so it will be eleven right okay so am I expecting when I give you",
+        205: "nine as an input you got me the note which is eleven this one something the front if I got if I gave you fourteen",
+        212: "you need to return the root which is twenty okay",
+        218: "because if the first node greater than 14 I see okay so if I do have a nine I",
+        228: "want to return eleven yes if I have a twelve I want to return fourteen yes",
+        235: "right okay and I do have access to the parent",
+        242: "nodes exactly how about to the way up there okay so just yeah going over a",
+        247: "couple examples say you give me 1111 yeah then the in order would be twelve",
+        255: "right exactly okay",
+        266: "so I'm just kind of think of the different cases that we can have here okay",
+        285: "so yeah let's just say it use 12 as an example it would be four so so if so if",
+        299: "we're using 12 and we're going down the tree it has to be on the right side okay"
+        }
+        times = list(transcript.keys())
+        edit_distances = []
+        for ind in range(len(times)-1):
+            start_time = times[ind]
+            end_time = times[ind+1] + 1
+            transcript_text = transcript[start_time]
+            model_output = self.parse(start_time, end_time)
+            print(f"Model: {model_output} vs Actual: {transcript_text}\n")
+            edit_distance = editdistance.eval(model_output, transcript_text)
+            edit_distances.append(edit_distance)
+        print(edit_distances)
+        return statistics.mean(edit_distances) # score

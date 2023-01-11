@@ -1,10 +1,8 @@
 import subprocess
 import os
 import whisper
-import pytesseract
 import numpy as np
 import statistics
-import cv2
 import editdistance
 from pydub import AudioSegment
 from east_detector import EASTDetector
@@ -13,7 +11,8 @@ from moviepy.editor import *
 from denoiser import pretrained
 from denoiser.dsp import convert_audio
 import torchaudio
-import torch
+import tkinter as tk
+from gingerit.gingerit import GingerIt
 
 from scipy.io import wavfile
 
@@ -31,55 +30,8 @@ class Parser:
         print("Creating Whisper Model...")
         self.whisper = whisper.load_model("small")
         print("Whisper created.")
-        self.img_proc_detector = EASTDetector()
-
-    def preprocess(self, path : str):
-        """
-        Filters and preprocesses audio sample.
-        """
-        denoising_model = pretrained.dns64().cuda()
-        wav, sr = torchaudio.load(path)
-        wav = convert_audio(wav.cuda(), sr, denoising_model.sample_rate, denoising_model.chin).cuda()
-        wav = wav.cpu()
-        torchaudio.save(path, wav, sr)
-        # Note: denoising decreases performance significantly as of now
-
-    def parse(self, start_time : int, end_time : int):
-        """
-        Given start and end time (in seconds), parses video
-        and audio files.
-        """
-        start_time_milli = start_time * 1000
-        end_time_milli = end_time * 1000
-        new_audio = AudioSegment.from_wav(self.audio_path)
-        new_audio = new_audio[start_time_milli:end_time_milli]
-        new_audio.export('bit.wav', format="wav")
-        audio = whisper.load_audio("bit.wav")
-        audio = whisper.pad_or_trim(audio)
-        mel = whisper.log_mel_spectrogram(audio).to(self.whisper.device)
-        options = whisper.DecodingOptions()
-        audio_str = (whisper.decode(self.whisper, mel, options)).text
-        return audio_str
-        
-    def parse_all(self, output_dir : str):
-        """
-        Parses whole video file and streams outputs to output
-        directory.
-        """
-        counter = 0
-        for start_time in range(0, 291, 10):
-            audio_str = self.parse(start_time, start_time + 10)
-            with open(f"{output_dir}/{start_time}.txt", "w") as f:
-                f.write("EXTRACTED AUDIO TRANSCRIPT:\n")
-                f.write(audio_str)
-            print(f"Parsed {counter}'th object\n")
-            counter += 1
-        
-    def evaluate(self):
-        """
-        Compares model audio output to transcript for evaluation purposes.
-        """
-        transcript = {
+        self.grammarly = GingerIt()
+        self.transcript = {
         0: "oh hello oh you're hearing me yeah I can hear you carry me yeah I'm doing all",
         5: "right wait how are you pretty good I'm pretty good I actually just found out that as a",
         10: "video interview so yeah okay it's okay is this your first time using this",
@@ -122,14 +74,97 @@ class Parser:
         285: "so yeah let's just say it use 12 as an example it would be four so so if so if",
         299: "we're using 12 and we're going down the tree it has to be on the right side okay"
         }
+
+
+
+    def preprocess(self, path : str):
+        """
+        Filters and preprocesses audio sample.
+        """
+        denoising_model = pretrained.dns64().cuda()
+        wav, sr = torchaudio.load(path)
+        wav = convert_audio(wav.cuda(), sr, denoising_model.sample_rate, denoising_model.chin).cuda()
+        wav = wav.cpu()
+        torchaudio.save(path, wav, sr)
+        # Note: denoising decreases performance significantly as of now
+
+    def parse(self, start_time : int, end_time : int):
+        """
+        Given start and end time (in seconds), parses video
+        and audio files.
+        """
+        start_time_milli = start_time * 1000
+        end_time_milli = end_time * 1000
+        new_audio = AudioSegment.from_wav(self.audio_path)
+        new_audio = new_audio[start_time_milli:end_time_milli]
+        new_audio.export('bit.wav', format="wav")
+        audio = whisper.load_audio("bit.wav")
+        audio = whisper.pad_or_trim(audio)
+        mel = whisper.log_mel_spectrogram(audio).to(self.whisper.device)
+        options = whisper.DecodingOptions()
+        audio_str = (whisper.decode(self.whisper, mel, options)).text
+        return audio_str
+        
+    def parse_all(self, output_dir : str):
+        """
+        Parses whole video file and streams outputs to output
+        directory.
+        """
+        counter = 0
+        for start_time in range(0, 291, 25):
+            audio_str = self.parse(start_time, start_time + 26)
+            with open(f"{output_dir}/{start_time}.txt", "w") as f:
+                f.write("EXTRACTED AUDIO TRANSCRIPT:\n")
+                f.write(audio_str)
+            print(f"Parsed {counter}'th object\n")
+            counter += 1
+
+    def parse_all_console(self, save_transcript = False, output_dir = ""):
+        """
+        Parses whole video file and streams outputs live in console.
+        """
+        transcript = []
+        for start_time in range(0,291,25):  
+            audio_str = self.parse(start_time, start_time + 26)
+            transcript.append(audio_str)
+            print(f"Model Output at {start_time}-{start_time+25}:\n{audio_str}\n")
+        if save_transcript:
+            with open(f"{output_dir}/transcript.txt", "w") as f:
+                f.write("Audio:\n")
+                f.write("\n".join(transcript))
+        return transcript
+            
+    def post_process(self, transcript):
+        """
+        Basically runs model output through a 'Grammarly' to get rid of repetition as well as spelling errors. 
+        """
+        rough_transcript = " ".join(transcript)
+        corrected_transcript = ""
+        for i in range(0, len(rough_transcript)-275, 275):
+            sub = rough_transcript[i:i+275]
+            corrected_transcript += (self.grammarly.parse(sub))['result']
+        print(corrected_transcript)
+        return corrected_transcript
+        # GingerIt isn't much helpful
+
+    def simple_evaluate(self, input : str):
+        """
+        Simply takes a string and sees how similar it is to YouTube transcript.
+        """
+        return editdistance.eval(input, " ".join(list(self.transcript.values())))
+
+    def model_evaluate(self):
+        """
+        Compares model audio output to transcript for model evaluation/comparison purposes.
+        """
         all_transcript_text = ""
         all_model_text = ""
         edit_distances = []
-        times = list(transcript.keys())
+        times = list(self.transcript.keys())
         for ind in range(len(times)-1):
             start_time = times[ind]
             end_time = times[ind+1]
-            transcript_text = transcript[start_time]
+            transcript_text = self.transcript[start_time]
             all_transcript_text += (transcript_text + " ")
             model_output = self.parse(start_time, end_time)
             all_model_text += (model_output + " ")

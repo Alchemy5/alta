@@ -1,0 +1,8 @@
+whisper
+editdistance
+pydub
+moviepy
+denoiser
+torch
+torchaudio
+openai

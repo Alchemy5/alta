@@ -7,3 +7,5 @@ torch
 torchaudio
 openai
 scipy
+cv2
+matplotlib

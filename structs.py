@@ -13,6 +13,7 @@ from denoiser.dsp import convert_audio
 import torchaudio
 import tkinter as tk
 from gingerit.gingerit import GingerIt
+import openai
 
 from scipy.io import wavfile
 
@@ -30,7 +31,9 @@ class Parser:
         print("Creating Whisper Model...")
         self.whisper = whisper.load_model("small")
         print("Whisper created.")
-        self.grammarly = GingerIt()
+        print("Initializing GPT-3...")
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        print("GPT-3 initialized.")
         self.transcript = {
         0: "oh hello oh you're hearing me yeah I can hear you carry me yeah I'm doing all",
         5: "right wait how are you pretty good I'm pretty good I actually just found out that as a",
@@ -74,8 +77,6 @@ class Parser:
         285: "so yeah let's just say it use 12 as an example it would be four so so if so if",
         299: "we're using 12 and we're going down the tree it has to be on the right side okay"
         }
-
-
 
     def preprocess(self, path : str):
         """
@@ -124,7 +125,7 @@ class Parser:
         Parses whole video file and streams outputs live in console.
         """
         transcript = []
-        for start_time in range(0,291,25):  
+        for start_time in range(0,50,25):  
             audio_str = self.parse(start_time, start_time + 26)
             transcript.append(audio_str)
             print(f"Model Output at {start_time}-{start_time+25}:\n{audio_str}\n")
@@ -134,18 +135,24 @@ class Parser:
                 f.write("\n".join(transcript))
         return transcript
             
-    def post_process(self, transcript):
+    def post_process(self, transcript, save_transcript = False, output_dir = ""):
         """
         Basically runs model output through a 'Grammarly' to get rid of repetition as well as spelling errors. 
         """
         rough_transcript = " ".join(transcript)
-        corrected_transcript = ""
-        for i in range(0, len(rough_transcript)-275, 275):
-            sub = rough_transcript[i:i+275]
-            corrected_transcript += (self.grammarly.parse(sub))['result']
-        print(corrected_transcript)
+        corrected_transcript = openai.Completion.create(
+            model="text-davinci-003",
+            prompt=f"Could you please correct this passage: {rough_transcript}",
+            max_tokens = 750,
+            temperature=0.1
+        )["choices"][0]["text"]
+        if save_transcript:
+            with open(f"{output_dir}/transcript.txt", "w") as f:
+                f.write("Old Audio:\n")
+                f.write(rough_transcript + "\n")
+                f.write("Corrected Audio:\n")
+                f.write(corrected_transcript + "\n")
         return corrected_transcript
-        # GingerIt isn't much helpful
 
     def simple_evaluate(self, input : str):
         """

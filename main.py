@@ -1,5 +1,9 @@
 from structs import Parser
-parser = Parser("input.mp4")
-transcript = parser.parse_all_console()
-corrected_transcript = parser.post_process(transcript, save_transcript=True, output_dir = "output")
+parser = Parser("whisper")
+#parser.eval_dataset("dataset/dataset1", "output/whisper_output_1.jpg")
+#parser.eval_dataset("dataset/dataset2", "output/whisper_output_2.jpg")
+#parser.eval_dataset("dataset/dataset3", "output/whisper_output_3.jpg")
+parser.eval_dataset("dataset/dataset1", "output/whisper_output_1.jpg")
+parser.eval_dataset("dataset/dataset2", "output/whisper_output_2.jpg")
+parser.eval_dataset("dataset/dataset3", "output/whisper_output_3.jpg")
 import pdb;pdb.set_trace()

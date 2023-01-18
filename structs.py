@@ -13,6 +13,9 @@ from scipy.io import wavfile
 from pathlib import PurePath
 import string
 import numpy as np
+import librosa
+import torch
+from transformers import Wav2Vec2Tokenizer, Wav2Vec2ForCTC
 import matplotlib.pyplot as plt
 
 class Dataset:
@@ -32,16 +35,82 @@ class Dataset:
                 for line in transcript_lines}
         self.filenames = list(self.transcript.keys())
 
+class Model:
+    """
+    Class for opensource speech-to-text models.
+    """
+    def __init__(self, model_name):
+        self.model_name = model_name
+
+    def parse(self, input_path : str, start_time = None, end_time = None):
+        """
+        Given start and end time (in seconds), parses audio files.
+        """
+        input_path = PurePath(input_path)
+        new_audio = AudioSegment.from_file(input_path, input_path.suffix[1:])
+        if start_time and end_time:
+            start_time_milli = start_time * 1000
+            end_time_milli = end_time * 1000
+            new_audio = new_audio[start_time_milli:end_time_milli]
+        new_audio.export('bit.wav', format="wav")
+
+class Whisper(Model):
+    """
+    Whisper speech-to-text model.
+    """
+    def __init__(self, model_name):
+        super().__init__(model_name)
+        print("Creating Whisper Model...")
+        self.whisper = whisper.load_model("medium")
+        print("Whisper created.")
+
+    def parse(self, input_path : str, start_time = None, end_time = None):
+        """
+        Whisper parse function override.
+        """
+        super().parse(input_path, start_time, end_time)
+        audio = whisper.load_audio("bit.wav")
+        audio = whisper.pad_or_trim(audio)
+        mel = whisper.log_mel_spectrogram(audio).to(self.whisper.device)
+        options = whisper.DecodingOptions()
+        audio_str = (whisper.decode(self.whisper, mel, options)).text
+        return audio_str
+
+class wav2vec(Model):
+    """
+    wav2vec speech-to-text model.
+    """
+    def __init__(self, model_name):
+        super().__init__(model_name)
+        print("Creating wav2vec model...")
+        self.tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+        self.model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+        print("Wav2vec created.")
+
+    def parse(self, input_path : str, start_time = None, end_time = None):
+        """
+        wav2vec parse function override.
+        """
+        super().parse(input_path, start_time, end_time)
+        input_audio, _ = librosa.load("bit.wav", sr = 16000)
+        input_values = self.tokenizer(input_audio, return_tensors="pt",
+            padding="longest").input_values
+        with torch.no_grad():
+            logits = self.model(input_values).logits
+            predicted_ids = torch.argmax(logits, dim=-1)
+        audio_str = self.tokenizer.batch_decode(predicted_ids)[0]
+        return audio_str
 
 class Parser:
-    def __init__(self):
-        print("Creating Whisper Model...")
-        self.whisper = whisper.load_model("small")
-        print("Whisper created.")
+    def __init__(self, model_name = "whisper"):
+        if model_name == "whisper":
+            self.model = Whisper("whisper")
+        elif model_name == "wav2vec":
+            self.model = wav2vec("wav2vec")
+        
         print("Initializing GPT-3...")
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        print("GPT-3 initialized.")
-        
+        print("GPT-3 initialized.")       
 
     def preprocess(self, path : str):
         """
@@ -53,24 +122,6 @@ class Parser:
         wav = wav.cpu()
         torchaudio.save(path, wav, sr)
         # Note: denoising decreases performance significantly as of now
-
-    def parse(self, input_path : str, start_time = None, end_time = None):
-        """
-        Given start and end time (in seconds), parses audio files.
-        """
-        input_path = PurePath(input_path)
-        new_audio = AudioSegment.from_file(input_path, input_path.suffix[1:])
-        if start_time and end_time:
-            start_time_milli = start_time * 1000
-            end_time_milli = end_time * 1000      
-            new_audio = new_audio[start_time_milli:end_time_milli]
-        new_audio.export('bit.wav', format="wav")
-        audio = whisper.load_audio("bit.wav")
-        audio = whisper.pad_or_trim(audio)
-        mel = whisper.log_mel_spectrogram(audio).to(self.whisper.device)
-        options = whisper.DecodingOptions()
-        audio_str = (whisper.decode(self.whisper, mel, options)).text
-        return audio_str
         
     def parse_all(self, input_path : str, output_dir : str):
         """
@@ -79,7 +130,7 @@ class Parser:
         """
         counter = 0
         for start_time in range(0, 291, 25):
-            audio_str = self.parse(input_path, start_time, start_time + 26)
+            audio_str = self.model.parse(input_path, start_time, start_time + 26)
             with open(f"{output_dir}/{start_time}.txt", "w") as f:
                 f.write("EXTRACTED AUDIO TRANSCRIPT:\n")
                 f.write(audio_str)
@@ -92,7 +143,7 @@ class Parser:
         """
         transcript = []
         for start_time in range(0,50,25):  
-            audio_str = self.parse(input_path, start_time, start_time + 26)
+            audio_str = self.model.parse(input_path, start_time, start_time + 26)
             transcript.append(audio_str)
             print(f"Model Output at {start_time}-{start_time+25}:\n{audio_str}\n")
         if save_transcript:
@@ -139,7 +190,7 @@ class Parser:
             end_time = times[ind+1]
             transcript_text = self.transcript[start_time]
             all_transcript_text += (transcript_text + " ")
-            model_output = self.parse(input_path, start_time, end_time)
+            model_output = self.model.parse(input_path, start_time, end_time)
             all_model_text += (model_output + " ")
             print(f"Model: {model_output} vs Actual: {transcript_text}\n")
             edit_distance = editdistance.eval(model_output, transcript_text)
@@ -157,7 +208,7 @@ class Parser:
         dataset = Dataset(dataset_path)
         edit_distances = []
         for filename in dataset.filenames:
-            model_output = self.parse(filename).upper() # Upper due to LibreSpeech formatting rules.
+            model_output = self.model.parse(filename).upper() # Upper due to LibreSpeech formatting rules.
             model_output_no_punctuation = ""
             for el in model_output:
                 if el not in string.punctuation:

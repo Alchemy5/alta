@@ -1,82 +1,0 @@
-EXTRACTED AUDIO TRANSCRIPT:
-Hello, are you hearing me? Yeah, I can hear you can you hear me? Yeah, I'm hearing you. Great. Great. How are you? Pretty good. I'm pretty good. I actually just found
-EXTRACTED SCREEN TEXT:
-You @ Peer eRe]
-
-Explain your solution and analyze its ime and space
-
-feces ieee
-
-ni
-
-Explain your solution and analyze its time and space
-
-poamnplerxitiec
-
-Pen
-null,
-
-findInOrderSuccessor that returns the Inorder Successor o
-
-inputNode . If inputNode has no Inorder Successor, retum
-eT
-
-inputNode ina BST, you’re asked to write a function
-findInOrderSuccessor that returns the Inorder Successor of
-
-gmanittinda Tf tnni¢tiede hac an Inneder Guececenr rahim
-
-of the input node (see examples below). Given a node
-inputNode ina BST, you’re asked to write a function
-
-Find TafedoreCieencemp thot vwatieme the Innedar fue
-
-is defined as the node with the smallest key greater tha
-
-of the input node (see examples below). Given a node
-
-gsrrniitNede tna ROT unn’re acked trwrite a fanetns
-
- 
-
-, an inorder successor of a node
-Ble U aL aea meee Ue meer Te Leal ead ~
-
-ideo
-s below). Given a node x
-
-in a Binary Search lree (Bot), an inorder Successor of a node
-is defined as the node with the smallest key greater than the key
-
-a) mot node (see examniesc helow) Given a node
-
- 
-
-Ina Binary Search Tree (BST), an Inorder Successor of a node
-
-te defined ac the nnde with the cmallect kev areater than the kev
-
-Sb
-feerel
-
-oe
-rele)
-
-iM Meee
-
-=]
-pes
-
-QUESTION
-
-IT'S YOUR PEER’S TURN TO INTERVIEW YOU. WHEN DONE, CLICK ON THE SWAP ROLES BUTTON ON THE LEFT Pode Peacsi1e1h|
-
-Lita) er ie) ce) 6 IT'S YOUR PEER’S TURN TO INTERVIEW YOU. WHEN DONE, CLICK ON THE SWAP ROLES BUTTON ON THE LEFT Pedi Peci11e1 |
-
-ite Bt ee ee
-
-LC Mh ae ua eet vie peal erela bres NIP A
-RS
-
-Challenge Session |Pramp x = @ Interview Session |Pramp @
-

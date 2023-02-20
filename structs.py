@@ -15,7 +15,8 @@ import string
 import numpy as np
 import librosa
 import torch
-from transformers import Wav2Vec2Tokenizer, Wav2Vec2ForCTC
+from transformers import Wav2Vec2Tokenizer, Wav2Vec2ForCTC, BartForConditionalGeneration, BartTokenizer, \
+    T5Tokenizer, T5ForConditionalGeneration
 import matplotlib.pyplot as plt
 
 class Dataset:
@@ -72,7 +73,7 @@ class Whisper(Model):
         audio = whisper.load_audio("bit.wav")
         audio = whisper.pad_or_trim(audio)
         mel = whisper.log_mel_spectrogram(audio).to(self.whisper.device)
-        options = whisper.DecodingOptions()
+        options = whisper.DecodingOptions(fp16 = False)
         audio_str = (whisper.decode(self.whisper, mel, options)).text
         return audio_str
 
@@ -142,7 +143,7 @@ class Parser:
         Parses whole video file and streams outputs live in console.
         """
         transcript = []
-        for start_time in range(0,50,25):  
+        for start_time in range(0,291,25):  
             audio_str = self.model.parse(input_path, start_time, start_time + 26)
             transcript.append(audio_str)
             print(f"Model Output at {start_time}-{start_time+25}:\n{audio_str}\n")
@@ -156,10 +157,10 @@ class Parser:
         """
         Basically runs model output through a 'Grammarly' to get rid of repetition as well as spelling errors. 
         """
-        rough_transcript = " ".join(transcript)
+        #rough_transcript = " ".join(transcript)
         corrected_transcript = openai.Completion.create(
             model="text-davinci-003",
-            prompt=f"Could you please correct this passage: {rough_transcript}",
+            prompt=f"Could you please correct this passage: {transcript}",
             max_tokens = 750,
             temperature=0.1
         )["choices"][0]["text"]
@@ -224,3 +225,33 @@ class Parser:
         ax.grid()
         fig.savefig(output_path)
         
+class Bart:
+    """
+    Open source model that takes transcript and summarizes it.
+    """
+    # TODO create subclasses for the bart model and the t5 model
+    def __init__(self, model_name):
+        self.model_name = model_name
+        self.model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
+        self.model_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+    def summarize(self, transcript):
+        """
+        Takes in transcript and feeds it through abstract summarization model.
+        """
+        tokenized_transcript = self.model_tokenizer.batch_encode_plus([transcript], return_tensors="pt", max_length=1024, truncation=True) ['input_ids']
+        summarized_transcript = self.model.generate(tokenized_transcript, num_beams=4, length_penalty=2.0, max_length=150, min_length=50, no_repeat_ngram_size=3)
+        return self.model_tokenizer.decode(summarized_transcript.squeeze(), skip_special_tokens=True)
+
+class t5:
+    """
+    Wrapper for t5 Base model.
+    """
+    def __init__(self, model_name):
+        self.model_name = t5
+        self.model = T5ForConditionalGeneration.from_pretrained("t5-base")
+        self.model_tokenizer = T5ForConditionalGeneration.from_pretrained("t5-base")
+
+    def summarize(self, transcript):
+        tokenized_transcript = self.model_tokenizer(transcript, return_tensors="pt").input_ids
+        summarized_transcript = model.generate(tokenized_transcript)
+        return self.model_tokenizer.decode(summarized_transcript[0], skip_special_tokens=True)
